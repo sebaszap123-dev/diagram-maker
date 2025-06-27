@@ -78,8 +78,10 @@ export function DiagramView({ items, sessionName }: DiagramViewProps) {
     ) => {
       if (items.length === 0) return startY
 
-      const levelSpacing = isHorizontal ? 280 : 200
-      const nodeSpacing = Math.max(80, 400 / Math.max(items.length, 1))
+      const levelSpacing = (isHorizontal ? 280 : 200)
+      const maxDescendants = Math.max(...items.map(item => countTotalNodes(item.children)), 1)
+      const nodeSpacing = Math.max(80, 80 * maxDescendants)
+      
 
       let currentY = startY
       const totalHeight = (items.length - 1) * nodeSpacing
@@ -136,7 +138,10 @@ export function DiagramView({ items, sessionName }: DiagramViewProps) {
       // Process all items as children of root
       items.forEach((item, index) => {
         const nodeId = `${item.id}-1-${index}`
-        const spacing = Math.max(100, 500 / Math.max(items.length, 1))
+
+        const totalChildren = countTotalNodes(item.children)
+        const spacing = Math.max(100, 100 * totalChildren)
+
         const totalHeight = (items.length - 1) * spacing
         const startY = -totalHeight / 2 + index * spacing
 

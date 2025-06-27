@@ -9,6 +9,7 @@ interface HierarchicalItem {
   id: string
   text: string
   level: number
+  parentId: string | null
 }
 
 interface HierarchicalEditorProps {
@@ -25,6 +26,7 @@ export function HierarchicalEditor({ sessionName, textContent, onContentChange }
     // Parse text content into items, with session name as root
     const lines = textContent.split("\n").filter((line) => line.trim())
     const parsedItems: HierarchicalItem[] = []
+    const stack: { id: string; level: number }[] = []
 
     // Add session name as root item if we have content
     if (lines.length > 0) {
@@ -32,20 +34,29 @@ export function HierarchicalEditor({ sessionName, textContent, onContentChange }
         id: "root",
         text: sessionName,
         level: 0,
+        parentId: null,
       })
+      stack.push({ id: "root", level: 0 })
     }
 
     lines.forEach((line, index) => {
       const level = line.match(/^\t*/)?.[0]?.length || 0
       const text = line.replace(/^\t*/, "").trim()
+      if (!text) return
 
-      if (text) {
-        parsedItems.push({
-          id: `item-${index}`,
-          text,
-          level: level + 1, // Add 1 because session name is level 0
-        })
+      // Find parent by stack
+      while (stack.length > 0 && stack[stack.length - 1].level >= level + 1) {
+        stack.pop()
       }
+      const parentId = stack.length > 0 ? stack[stack.length - 1].id : null
+      const id = `item-${index}`
+      parsedItems.push({
+        id,
+        text,
+        level: level + 1, // Add 1 because session name is level 0
+        parentId,
+      })
+      stack.push({ id, level: level + 1 })
     })
 
     setItems(parsedItems)
@@ -68,13 +79,28 @@ export function HierarchicalEditor({ sessionName, textContent, onContentChange }
   }
 
   const changeItemLevel = (id: string, levelChange: number) => {
-    const newItems = items.map((item) => {
-      if (item.id === id) {
-        const newLevel = Math.max(1, Math.min(5, item.level + levelChange)) // Min level 1 (children of root), max level 5
-        return { ...item, level: newLevel }
+    const itemIndex = items.findIndex((item) => item.id === id)
+    if (itemIndex === -1) return
+    const item = items[itemIndex]
+    let newLevel = Math.max(1, Math.min(5, item.level + levelChange))
+    let newParentId = item.parentId
+
+    // Find new parentId based on newLevel
+    if (levelChange !== 0) {
+      // Search backwards for the closest item with level = newLevel - 1
+      for (let i = itemIndex - 1; i >= 0; i--) {
+        if (items[i].level === newLevel - 1) {
+          newParentId = items[i].id
+          break
+        }
       }
-      return item
-    })
+      // If not found, set to root
+      if (newLevel === 1) newParentId = "root"
+    }
+
+    const newItems = items.map((it, idx) =>
+      idx === itemIndex ? { ...it, level: newLevel, parentId: newParentId } : it
+    )
     setItems(newItems)
     updateTextContent(newItems)
   }
@@ -82,10 +108,13 @@ export function HierarchicalEditor({ sessionName, textContent, onContentChange }
   const addNewItem = () => {
     if (!newItemText.trim()) return
 
+    // Find root as parent
+    const parentId = items.length > 0 ? "root" : null
     const newItem: HierarchicalItem = {
       id: `item-${Date.now()}`,
       text: newItemText.trim(),
       level: 1, // Start as child of root
+      parentId,
     }
 
     const newItems = [...items, newItem]
@@ -151,6 +180,7 @@ export function HierarchicalEditor({ sessionName, textContent, onContentChange }
       id: `item-${Date.now()}`,
       text: "New child item",
       level: parentItem.level + 1,
+      parentId: parentItem.id,
     }
 
     // Find the position to insert the new child
